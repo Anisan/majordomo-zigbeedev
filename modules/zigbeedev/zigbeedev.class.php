@@ -316,29 +316,82 @@ class zigbeedev extends module
         if ($total) {
             for ($i = 0; $i < $total; $i++) {
                 $old_value = $properties[$i]['VALUE'];
-                $new_value = $value;
-                if ($old_value == 'true' || $old_value == 'false') {
-                    if ($value) {
-                        $new_value = true;
-                    } else {
-                        $new_value = false;
+                $old_converted = $properties[$i]['VALUE'];
+                $new_converted = '';
+                if ($properties[$i]['CONVERTER'] == 0)
+                {
+                    $new_value = $value;
+                    if ($old_value=='true' || $old_value=='false') {
+                        if ($value) {
+                            $new_value=true;
+                        } else {
+                            $new_value=false;
+                        }
+                    } elseif ($old_value=='ON' || $old_value=='OFF') {
+                        if ($value) {
+                            $new_value='ON';
+                        } else {
+                            $new_value='OFF';
+                        }
+                    } elseif ($old_value=='CLOSE' || $old_value=='OPEN') {
+                        if ($value) {
+                            $new_value='CLOSE';
+                        } else {
+                            $new_value='OPEN';
+                        }
+                    } elseif (is_integer($value)) {
+                        $new_value=(int)$value;
+                    } elseif (is_float($value)) {
+                        $new_value=(float)$value;
                     }
-                } elseif ($old_value == 'ON' || $old_value == 'OFF') {
-                    if ($value) {
-                        $new_value = 'ON';
-                    } else {
-                        $new_value = 'OFF';
-                    }
-                } elseif ($old_value == 'CLOSE' || $old_value == 'OPEN') {
-                    if ($value) {
-                        $new_value = 'CLOSE';
-                    } else {
-                        $new_value = 'OPEN';
-                    }
-                } elseif (is_integer($value)) {
-                    $new_value = (int)$value;
-                } elseif (is_float($value)) {
-                    $new_value = (float)$value;
+                }
+                elseif ($properties[$i]['CONVERTER'] == 1)
+                {
+                    $new_value = $value;
+                }
+                elseif ($properties[$i]['CONVERTER'] == 2)
+                {
+                    if ($value=='0') $new_value = 'offline';
+                    elseif ($value=='1') $new_value = 'online';
+                }
+                elseif ($properties[$i]['CONVERTER'] == 3) 
+                {
+                    $color = str_replace('0x','', $value);
+                    $color = str_replace('#','', $color);
+                    $rgb['r'] = hexdec(substr($color, 0, 2)); 
+                    $rgb['g'] = hexdec(substr($color, 2, 2));
+                    $rgb['b'] = hexdec(substr($color, 4, 2));
+                    /* Normalises RGB values to 1 */
+                    $rgb = array_map(function($item) {
+                        return $item / 255;
+                    }, $rgb);
+                    $rgb = array_map(function($item) {
+                        if ($item > 0.04045) {
+                            $item = pow((($item + 0.055) / 1.055), 2.4);
+                        } else {
+                            $item = $item / 12.92;
+                        }
+                        return ($item * 100);
+                    }, $rgb);
+                    $xyz = array(
+                        'x' => ($rgb['r'] * 0.4124) + ($rgb['g'] * 0.3576 ) + ($rgb['b'] * 0.1805),
+                        'y' => ($rgb['r'] * 0.2126) + ($rgb['g'] * 0.7152 ) + ($rgb['b'] * 0.0722),
+                        'z' => ($rgb['r'] * 0.0193) + ($rgb['g'] * 0.1192 ) + ($rgb['b'] * 0.9505)
+                    );
+					if ($color != "000000")
+					{
+						$xy = array(
+							'x' =>  $xyz['x'] / ($xyz['x'] + $xyz['y'] + $xyz['z']),
+							'y' => $xyz['y'] / ($xyz['x'] + $xyz['y'] + $xyz['z'])
+							);
+							
+						$new_value = json_encode($xy);
+					}
+					else 
+						$new_value = '{"x"=null,"y"=null}';
+					//$data = array("hex" => "#".$color);
+					//$new_value =  json_encode($data);
+					//registerError('set solor', $new_value);
                 }
                 //if ($properties[$i]['VALUE'])
                 $this->setDeviceData($properties[$i]['DEVICE_ID'], $properties[$i]['TITLE'], $new_value);
@@ -475,8 +528,68 @@ class zigbeedev extends module
             $value = substr($value, 0, 255);
         }
         $old_value = $property['VALUE'];
-        $property['VALUE'] = $value;
-        $property['UPDATED'] = date('Y-m-d H:i:s');
+        $property['VALUE']=$value;
+        $converted = '';
+        if ($property['CONVERTER'] == 0)
+        {
+            $value = strtolower($value);
+            if ($value=='false' || $value=='off' || $value=='no' || $value=='open') {
+                $converted = '0';
+            } elseif ($value=='true' || $value=='on' || $value=='yes' || $value=='close') {
+                $converted = '1';
+            }
+        }
+        elseif ($property['CONVERTER'] == 2)
+        {
+            if ($value=='offline') $converted = '0';
+            elseif ($value=='online') $converted = '1';
+        }
+        elseif ($property['CONVERTER'] == 3) 
+        {
+            $bri = 254;
+            $xy = json_decode($value,true);
+            if (!array_key_exists("hex",$xy)) {
+                $x = $xy['x'];
+                $y= $xy['y'];
+
+                $z = 1.0 - $x - $y;
+                $Y = 1;//round($bri / 254.0,2);
+                $X = $y==0?($Y / $y) * $x:0;
+                $Z = $y==0?($Y / $y) * $z:0;
+                
+                $r = ($X * 3.2406) + ($Y * -1.5372) + ($Z * -0.4986);
+                $g = ($X * -0.9689) + ($Y * 1.8758) + ($Z * 0.0415);
+                $b = ($X * 0.0557) + ($Y * -0.2040) + ($Z * 1.0570);
+
+                // Assume sRGB
+                $r = $r <= 0.0031308 ? 12.92 * $r : (1.0 + 0.055) * pow($r, (1.0 / 2.4)) - 0.055;
+                $g = $g <= 0.0031308 ? 12.92 * $g : (1.0 + 0.055) * pow($g, (1.0 / 2.4)) - 0.055;
+                $b = $b <= 0.0031308 ? 12.92 * $b : (1.0 + 0.055) * pow($b, (1.0 / 2.4)) - 0.055;
+                
+                $r = min(max(0, $r), 1);
+                $g = min(max(0, $g), 1);
+                $b = min(max(0, $b), 1);
+    
+                $r = $r * 255;
+                $g = $g * 255;
+                $b = $b * 255;
+
+                $r = str_pad((dechex(round($r))),2,"0",STR_PAD_LEFT);
+                $g = str_pad((dechex(round($g))),2,"0",STR_PAD_LEFT);
+                $b = str_pad((dechex(round($b))),2,"0",STR_PAD_LEFT);
+
+                $converted = $r.$g.$b;
+            }
+        }
+        elseif ($properties[$i]['CONVERTER'] == 4) 
+        {
+            $converted = strtotime($value);
+        }        
+        $property['CONVERTED']=$converted;
+        $property['UPDATED']=date('Y-m-d H:i:s');
+		
+		//DebMes(json_encode($property),'zigbeedev_devices');
+		
         if (!$property['ID']) {
             $property['ID'] = SQLInsert('zigbeeproperties', $property);
         } else {
@@ -484,33 +597,45 @@ class zigbeedev extends module
         }
 
         if ($property['LINKED_OBJECT']) {
-
-            $value = strtolower($value);
-            if ($value == 'false' || $value == 'off' || $value == 'no' || $value == 'open' || $value=='offline') {
-                $new_value = 0;
-            } elseif ($value == 'true' || $value == 'on' || $value == 'yes' || $value == 'close' || $value=='online') {
-                $new_value = 1;
-            } else {
+            if ($converted != '')
+                $new_value = $converted;
+            else
                 $new_value = $value;
-            }
-
+            
             if ($property['VALUE'] != $old_value || $prop == 'action' || $property['PROCESS_TYPE'] == 1) {
-                if ($property['LINKED_PROPERTY']) {
-                    setGlobal($property['LINKED_OBJECT'] . '.' . $property['LINKED_PROPERTY'], $new_value, array($this->name => '0'));
-                }
                 if ($property['LINKED_METHOD']) {
-                    callMethod($property['LINKED_OBJECT'] . '.' . $property['LINKED_METHOD'], array(
-					'VALUE' => $new_value, 'NEW_VALUE' => $new_value, 'TITLE' => $prop
-					));
+                    callMethod($property['LINKED_OBJECT'].'.'.$property['LINKED_METHOD'],
+                        array('VALUE'=>$new_value,'NEW_VALUE'=>$new_value,'OLD_VALUE'=>$new_value, 'TITLE' => $prop));
+                }
+                if ($property['LINKED_PROPERTY']) {
+                    
+                    $update = true;
+                    
+                    $sqlQuery = "SELECT * FROM pvalues 
+                                WHERE PROPERTY_NAME = '" . DBSafe($property['LINKED_OBJECT'].'.'.$property['LINKED_PROPERTY']) . "'";
+                    $rec_value = SQLSelectOne($sqlQuery);
+                    if ($rec_value['ID']) {
+                        
+                        $current_value = $rec_value['VALUE'];
+                        if ($current_value==$new_value)
+                            $update = false;
+                        $timestamp1 = strtotime('-1 hour'); 
+                        $timestamp2 = strtotime($rec_value['UPDATED']); 
+                        if ($timestamp1 > $timestamp2)
+                            $update = true;
+                    }
+                    
+                    if ($update || $prop=="action") {
+                        setGlobal($property['LINKED_OBJECT'].'.'.$property['LINKED_PROPERTY'],$new_value, array($this->name => '0'));
+                    }
                 }
             }
         }
-        if ($prop == 'battery' && $device['BATTERY_LEVEL'] != $value) {
+		if ($prop == 'battery' && $device['BATTERY_LEVEL'] != $value) {
             $device['IS_BATTERY'] = 1;
             $device['BATTERY_LEVEL'] = $value;
             SQLUpdate('zigbeedevices', $device);
         }
-
     }
 
     function mqttPublish($topic, $value, $qos = 0, $retain = 0)
@@ -624,6 +749,8 @@ class zigbeedev extends module
  zigbeeproperties: ID int(10) unsigned NOT NULL auto_increment
  zigbeeproperties: TITLE varchar(100) NOT NULL DEFAULT ''
  zigbeeproperties: VALUE varchar(255) NOT NULL DEFAULT ''
+ zigbeeproperties: CONVERTED varchar(255) NOT NULL DEFAULT ''
+ zigbeeproperties: CONVERTER int(10) NOT NULL DEFAULT '0'
  zigbeeproperties: DEVICE_ID int(10) NOT NULL DEFAULT '0'
  zigbeeproperties: LINKED_OBJECT varchar(100) NOT NULL DEFAULT ''
  zigbeeproperties: LINKED_PROPERTY varchar(100) NOT NULL DEFAULT ''

@@ -11,8 +11,6 @@ if ($this->mode == 'update') {
     $ok = 1;
     // step: default
     if ($this->tab == '') {
-        //updating '<%LANG_TITLE%>' (varchar, required)
-        //$rec['TITLE']=gr('title');
         if ($rec['TITLE'] == '') {
             $out['ERR_TITLE'] = 1;
             $ok = 0;
@@ -71,6 +69,7 @@ if ($this->tab == 'data') {
                 $properties[$i]['LINKED_METHOD']=gr('linked_method','trim');
                 $properties[$i]['READ_ONLY']=gr('read_only','trim');
                 $properties[$i]['PROCESS_TYPE']=gr('process_type','int');
+                $properties[$i]['CONVERTER']=gr('converter','trim');
                 SQLUpdate('zigbeeproperties',$properties[$i]);
 
                 if ($old_linked_object && $old_linked_object != $properties[$i]['LINKED_OBJECT'] &&

@@ -24,6 +24,9 @@ div.hint {
    if (typeof data == 'object') {
     for(let i=0;i<data.length;i++) {
      //alert(data[i].TITLE);
+	 let data = data[i].VALUE
+	 if (data[i].CONVERTED!=data[i].VALUE)
+		data = data + "("+data[i].CONVERTED+")"
      $('#prop'+data[i].ID+'_value').html(data[i].VALUE);
      $('#prop'+data[i].ID+'_updated').html(data[i].UPDATED);
     }
@@ -48,7 +51,7 @@ div.hint {
    [#begin PROPERTIES#]
    <tr[#if ID="<#PROP_ID#>"#] class="alert alert-success"[#endif#]>
     <td><a href="?id=<#ID#>&view_mode=<#VIEW_MODE#>&tab=<#TAB#>&prop_id=[#ID#]"><b>[#TITLE#]</b></a></td>
-    <td id="prop[#ID#]_value">[#VALUE#]</td>
+    <td id="prop[#ID#]_value">[#VALUE#][#if CONVERTED!='' #] (<b>[#CONVERTED#]<b>)[#endif#]</td>
     <td>
      [#if LINKED_OBJECT!=""#][#LINKED_OBJECT#][#endif#]
      [#if LINKED_PROPERTY!=""#].[#LINKED_PROPERTY#][#endif#]
@@ -100,7 +103,18 @@ div.hint {
       <label><#LANG_READ_ONLY#></label>
     </div>
    </div>
-
+   <div class="form-group">
+	 <label>Converter:</label>
+	 <div>
+		<select name="converter" class="form-control" id="converter">
+			<option value="0"[#if PROP_CONVERTER=="0"#] selected[#endif#]>Default</option>
+			<option value="1"[#if PROP_CONVERTER=="1"#] selected[#endif#]>No convert</option>
+			<option value="2"[#if PROP_CONVERTER=="2"#] selected[#endif#]>online/offline = 1/0</option>
+			<option value="3"[#if PROP_CONVERTER=="3"#] selected[#endif#]>ColorXY = Hex RGB</option>
+			<option value="4"[#if PROP_CONVERTER=="4"#] selected[#endif#]>DateTime = timestamp</option>
+		</select>
+	 </div>
+	</div>
 
    <div class="form-group">
     <input type="submit" class="btn btn-default btn-primary" value="<#LANG_SUBMIT#>">
