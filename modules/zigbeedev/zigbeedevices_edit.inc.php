@@ -72,8 +72,8 @@ if ($this->tab == 'data') {
                 $properties[$i]['CONVERTER']=gr('converter','trim');
                 SQLUpdate('zigbeeproperties',$properties[$i]);
 
-                if ($old_linked_object && $old_linked_object != $properties[$i]['LINKED_OBJECT'] &&
-                    $old_linked_property && $old_linked_property != $properties[$i]['LINKED_PROPERTY']) {
+                if (($old_linked_object && $old_linked_object != $properties[$i]['LINKED_OBJECT']) ||
+                    ($old_linked_property && $old_linked_property != $properties[$i]['LINKED_PROPERTY'])) {
                     removeLinkedProperty($old_linked_object, $old_linked_property, $this->name);
                 }
                 if ($properties[$i]['LINKED_OBJECT'] && $properties[$i]['LINKED_PROPERTY']) {

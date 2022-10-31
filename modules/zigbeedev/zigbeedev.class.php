@@ -272,6 +272,10 @@ class zigbeedev extends module
     {
         $rec = SQLSelectOne("SELECT * FROM zigbeedevices WHERE ID='$id'");
         // some action for related tables
+	$properties=SQLSelect("SELECT * FROM zigbeeproperties WHERE DEVICE_ID='".$rec['ID']."' AND LINKED_OBJECT != '' AND LINKED_PROPERTY != ''");
+	foreach($properties as $prop) {
+	    removeLinkedProperty($prop['LINKED_OBJECT'], $prop['LINKED_PROPERTY'], $this->name);
+	}
         SQLExec("DELETE FROM zigbeeproperties WHERE DEVICE_ID=" . $rec['ID']);
         SQLExec("DELETE FROM zigbeedevices WHERE ID='" . $rec['ID'] . "'");
     }
@@ -421,6 +425,8 @@ class zigbeedev extends module
             $device['ID'] = SQLInsert('zigbeedevices', $device);
         } else {
             $device['UPDATED'] = date('Y-m-d H:i:s');
+            $device['FULL_PATH'] = $path;
+            $device['FULL_PATH'] = preg_replace('/\/bridge.+/', '', $device['FULL_PATH']);
             SQLUpdate('zigbeedevices', $device);
         }
 
