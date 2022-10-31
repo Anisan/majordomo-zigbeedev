@@ -548,18 +548,24 @@ class zigbeedev extends module
         {
             $bri = 254;
             $xy = json_decode($value,true);
+            //registerError('convertXY', $value);
             if (!array_key_exists("hex",$xy)) {
-                $x = $xy['x'];
-                $y= $xy['y'];
+                $_x = $xy['x'];
+                $_y= $xy['y'];
 
-                $z = 1.0 - $x - $y;
+                $_z = 1.0 - $_x - $_y;
                 $Y = 1;//round($bri / 254.0,2);
-                $X = $y==0?($Y / $y) * $x:0;
-                $Z = $y==0?($Y / $y) * $z:0;
+                $X = $y==0?($Y / $_y) * $_x:0;
+                $Z = $y==0?($Y / $_y) * $_z:0;
                 
                 $r = ($X * 3.2406) + ($Y * -1.5372) + ($Z * -0.4986);
                 $g = ($X * -0.9689) + ($Y * 1.8758) + ($Z * 0.0415);
                 $b = ($X * 0.0557) + ($Y * -0.2040) + ($Z * 1.0570);
+                
+                //Convert to RGB using Wide RGB D65 conversion
+                //$r 	=  $X * 1.656492 - $Y * 0.354851 - $Z * 0.255038;
+                //$g 	= -X * -0.707196 + $Y * 1.655397 + $Z * 0.036152;
+                //$b	=  $X * 0.051713 - $Y * 0.121364 + $Z * 1.011530;
 
                 // Assume sRGB
                 $r = $r <= 0.0031308 ? 12.92 * $r : (1.0 + 0.055) * pow($r, (1.0 / 2.4)) - 0.055;
@@ -579,6 +585,9 @@ class zigbeedev extends module
                 $b = str_pad((dechex(round($b))),2,"0",STR_PAD_LEFT);
 
                 $converted = $r.$g.$b;
+                //registerError('convertXY', $converted);
+                
+               
             }
         }
         elseif ($properties[$i]['CONVERTER'] == 4) 
