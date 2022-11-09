@@ -533,8 +533,17 @@ class zigbeedev extends module
         } elseif (strlen($value) > 255) {
             $value = substr($value, 0, 255);
         }
+        
+        if ($property['ROUND'] && $property['ROUND'] != -1 ){
+            if (is_numeric($value))
+                $value = round($value, $property['ROUND']);
+        }
+        
+        
         $old_value = $property['VALUE'];
         $property['VALUE']=$value;
+        
+            
         $converted = '';
         if ($property['CONVERTER'] == 0)
         {
@@ -798,6 +807,7 @@ class zigbeedev extends module
  zigbeeproperties: VALUE varchar(255) NOT NULL DEFAULT ''
  zigbeeproperties: CONVERTED varchar(255) NOT NULL DEFAULT ''
  zigbeeproperties: CONVERTER int(10) NOT NULL DEFAULT '0'
+ zigbeeproperties: ROUND int(3) NOT NULL DEFAULT '-1'
  zigbeeproperties: DEVICE_ID int(10) NOT NULL DEFAULT '0'
  zigbeeproperties: LINKED_OBJECT varchar(100) NOT NULL DEFAULT ''
  zigbeeproperties: LINKED_PROPERTY varchar(100) NOT NULL DEFAULT ''

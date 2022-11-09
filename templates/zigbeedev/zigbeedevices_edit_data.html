@@ -51,13 +51,14 @@ div.hint {
    [#begin PROPERTIES#]
    <tr[#if ID="<#PROP_ID#>"#] class="alert alert-success"[#endif#]>
     <td><a href="?id=<#ID#>&view_mode=<#VIEW_MODE#>&tab=<#TAB#>&prop_id=[#ID#]"><b>[#TITLE#]</b></a></td>
-    <td id="prop[#ID#]_value">[#VALUE#][#if CONVERTED!='' #] (<b>[#CONVERTED#]<b>)[#endif#]</td>
+    <td id="prop[#ID#]_value">[#VALUE#][#if CONVERTED!='' #] (<b>[#CONVERTED#]</b>)[#endif#]</td>
     <td>
      [#if LINKED_OBJECT!=""#][#LINKED_OBJECT#][#endif#]
      [#if LINKED_PROPERTY!=""#].[#LINKED_PROPERTY#][#endif#]
      [#if LINKED_METHOD!=""#] &gt; [#LINKED_METHOD#][#endif#]
      [#if READ_ONLY=="1"#]<div class="hint" title="<#LANG_READ_ONLY#>">[r]</div>[#endif#]
      [#if PROCESS_TYPE=="1"#]<div class="hint" title="<#LANG_ZIGBEEDEV_PROCESS_TYPE_ANY#>">[a]</div>[#endif#]
+     [#if ROUND!="-1"#]<div class="hint" title="Round">[[#ROUND#]]</div>[#endif#]
     </td>
     <td id="prop[#ID#]_updated" nowrap>[#UPDATED#]</td>
    </tr>
@@ -101,6 +102,12 @@ div.hint {
     <div class="controls">
       <input type="checkbox" id="read_only" name="read_only" value="1" [#if PROP_READ_ONLY="1"#] checked[#endif#]>
       <label><#LANG_READ_ONLY#></label>
+    </div>
+   </div>
+   <div class="form-group">
+    <div class="controls">
+      <label>Round:</label>
+      <input type="number" id="round" name="round" min="-1" step="1" max="3" value="[#PROP_ROUND#]">
     </div>
    </div>
    <div class="form-group">
