@@ -397,6 +397,10 @@ class zigbeedev extends module
 					//$new_value =  json_encode($data);
 					//registerError('set solor', $new_value);
                 }
+                elseif ($properties[$i]['CONVERTER'] == 5) 
+                {
+                    $new_value = round( $value * 254 / 100 );
+                }
                 //if ($properties[$i]['VALUE'])
                 $this->setDeviceData($properties[$i]['DEVICE_ID'], $properties[$i]['TITLE'], $new_value);
             }
@@ -605,10 +609,14 @@ class zigbeedev extends module
                
             }
         }
-        elseif ($properties[$i]['CONVERTER'] == 4) 
+        elseif ($property['CONVERTER'] == 4)
         {
             $converted = strtotime($value);
-        }        
+        }
+        elseif ($property['CONVERTER'] == 5)
+        {
+            $converted = round( $value * 100 / 254 );
+        }
         $property['CONVERTED']=$converted;
         $property['UPDATED']=date('Y-m-d H:i:s');
 		
@@ -655,7 +663,7 @@ class zigbeedev extends module
                 }
             }
         }
-		if ($prop == 'battery' && $device['BATTERY_LEVEL'] != $value) {
+        if ($prop == 'battery' && $device['BATTERY_LEVEL'] != $value) {
             $device['IS_BATTERY'] = 1;
             $device['BATTERY_LEVEL'] = $value;
             SQLUpdate('zigbeedevices', $device);
