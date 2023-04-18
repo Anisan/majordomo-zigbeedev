@@ -71,6 +71,7 @@ if ($this->tab == 'data') {
                 $properties[$i]['PROCESS_TYPE']=gr('process_type','int');
                 $properties[$i]['CONVERTER']=gr('converter','trim');
                 $properties[$i]['ROUND']=gr('round','trim');
+                $properties[$i]['MIN_PERIOD']=gr('min_period','trim');
                 SQLUpdate('zigbeeproperties',$properties[$i]);
 
                 if (($old_linked_object && $old_linked_object != $properties[$i]['LINKED_OBJECT']) ||

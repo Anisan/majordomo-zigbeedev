@@ -526,6 +526,12 @@ class zigbeedev extends module
     function processData(&$device, $prop, $value)
     {
         $property = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE TITLE='" . DBSafe($prop) . "' AND DEVICE_ID=" . $device['ID']);
+        
+        if ($property['MIN_PERIOD']) {
+            if (time() - strtotime($property['UPDATED']) < $property['MIN_PERIOD'])
+                return;
+        }
+        
         if (!$property['ID']) {
             $property = array('TITLE' => $prop, 'DEVICE_ID' => $device['ID']);
         }
@@ -815,6 +821,7 @@ class zigbeedev extends module
  zigbeeproperties: VALUE varchar(255) NOT NULL DEFAULT ''
  zigbeeproperties: CONVERTED varchar(255) NOT NULL DEFAULT ''
  zigbeeproperties: CONVERTER int(10) NOT NULL DEFAULT '0'
+ zigbeeproperties: MIN_PERIOD int(10) DEFAULT '0'
  zigbeeproperties: ROUND int(3) NOT NULL DEFAULT '-1'
  zigbeeproperties: DEVICE_ID int(10) NOT NULL DEFAULT '0'
  zigbeeproperties: LINKED_OBJECT varchar(100) NOT NULL DEFAULT ''

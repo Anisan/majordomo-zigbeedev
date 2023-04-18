@@ -88,6 +88,7 @@ if ($res[0]['ID']) {
                 if ($d['READ_ONLY']) $res[$i]['DATA'] .= ' [r]';
                 if ($d['PROCESS_TYPE']) $res[$i]['DATA'] .= ' [a]';
                 if (intval($d['ROUND']) != -1) $res[$i]['DATA'] .= ' ['.$d['ROUND'].']';
+                if (intval($d['MIN_PERIOD']) != 0) $res[$i]['DATA'] .= ' {'.$d['MIN_PERIOD'].'}';
                 $res[$i]['DATA'] .= ')';
             }
             if ($d['CONVERTED']!='') 
