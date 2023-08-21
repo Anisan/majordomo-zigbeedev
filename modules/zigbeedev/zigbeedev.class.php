@@ -148,6 +148,7 @@ class zigbeedev extends module
         $out['MQTT_PASSWORD'] = $this->config['MQTT_PASSWORD'];
         $out['MQTT_AUTH'] = $this->config['MQTT_AUTH'];
         $out['DEBUG_MODE'] = $this->config['DEBUG_MODE'];
+        $out['CREATE_DEVICES_AUTOMATICALLY'] = $this->config['CREATE_DEVICES_AUTOMATICALLY'];
 
         if ($this->view_mode == 'update_settings') {
             $this->config['MQTT_HOST'] = gr('mqtt_host', 'trim');
@@ -157,6 +158,7 @@ class zigbeedev extends module
             $this->config['MQTT_PORT'] = gr('mqtt_port', 'int');
             $this->config['MQTT_QUERY'] = gr('mqtt_query', 'trim');
             $this->config['DEBUG_MODE'] = gr('debug_mode', 'int');
+            $this->config['CREATE_DEVICES_AUTOMATICALLY'] = gr('create_devices_automatically', 'int');
             $this->saveConfig();
             setGlobal('cycle_zigbeedevControl', 'restart');
             $this->redirect("?");
@@ -189,6 +191,10 @@ class zigbeedev extends module
             }
         }
 
+        if ($this->view_mode=='list_unsupported') {
+            $this->listUnsupportedDevices($out);
+        }
+
         if ($this->mode == 'refresh_devices') {
             $this->refreshDevices();
             $this->redirect("?ok=1");
@@ -196,9 +202,65 @@ class zigbeedev extends module
 
     }
 
+    function listUnsupportedDevices(&$out) {
+        $devices = SQLSelect("SELECT ID, MODEL, MODEL_NAME FROM zigbeedevices ORDER BY MODEL_NAME, TITLE");
+        $res_devices = array();
+        $total = count($devices);
+        $seen = array();
+        for($i=0;$i<$total;$i++) {
+            $device = $devices[$i];
+            if (trim($device['MODEL'])=='' && trim($device['MODEL_NAME'])=='') continue;
+            if ($device['MODEL']!='') {
+                if (isset($seen[$device['MODEL']])) continue;
+                $seen[$device['MODEL']] = 1;
+            }
+            if ($device['MODEL_NAME']!='') {
+                if (isset($seen[$device['MODEL_NAME']])) continue;
+                $seen[$device['MODEL_NAME']] = 1;
+            }
+            $supported = $this->checkDeviceType($device['ID']);
+            if (!$supported) {
+                $properties = SQLSelect("SELECT TITLE, VALUE, LINKED_OBJECT, LINKED_PROPERTY, LINKED_METHOD FROM zigbeeproperties WHERE DEVICE_ID=".$device['ID']);
+                $total_p = count($properties);
+                for($ip=0;$ip<$total_p;$ip++) {
+                    if ($properties[$ip]['LINKED_OBJECT']!='') {
+                        $sdevice = SQLSelectOne("SELECT ID, TYPE FROM devices WHERE LINKED_OBJECT='".$properties[$ip]['LINKED_OBJECT']."'");
+                        if (isset($sdevice['TYPE'])) {
+                            $properties[$ip]['LINKED_OBJECT'].=' (device type: '.$sdevice['TYPE'].')';
+                        }
+                    }
+                    foreach($properties[$ip] as $k=>$v) {
+                        if ($v==="") unset($properties[$ip][$k]);
+                    }
+                }
+                $device['PROPERTIES']=$properties;
+                unset($device['ID']);
+                $res_devices[]=$device;
+            }
+
+        }
+        if (count($res_devices)>0) {
+            $out['DETAILS'] = json_encode($res_devices,JSON_PRETTY_PRINT);
+        }
+
+    }
+
     function refreshDevices()
     {
         $this->getConfig();
+
+        /*
+        if ($this->config['CREATE_DEVICES_AUTOMATICALLY']) {
+            $devices = SQLSelect("SELECT ID, TITLE FROM zigbeedevices ORDER BY ID");
+            $total = count($devices);
+            for($i=0;$i<$total;$i++) {
+                if ($this->canCreateDevice($devices[$i]['ID'])) {
+                    $this->createDevice($devices[$i]['ID']);
+                }
+            }
+        }
+        */
+
         $query = $this->config['MQTT_QUERY'];
         $query_list = explode(',', $query);
         $total = count($query_list);
@@ -272,10 +334,10 @@ class zigbeedev extends module
     {
         $rec = SQLSelectOne("SELECT * FROM zigbeedevices WHERE ID='$id'");
         // some action for related tables
-	$properties=SQLSelect("SELECT * FROM zigbeeproperties WHERE DEVICE_ID='".$rec['ID']."' AND LINKED_OBJECT != '' AND LINKED_PROPERTY != ''");
-	foreach($properties as $prop) {
-	    removeLinkedProperty($prop['LINKED_OBJECT'], $prop['LINKED_PROPERTY'], $this->name);
-	}
+        $properties = SQLSelect("SELECT * FROM zigbeeproperties WHERE DEVICE_ID='" . $rec['ID'] . "' AND LINKED_OBJECT != '' AND LINKED_PROPERTY != ''");
+        foreach ($properties as $prop) {
+            removeLinkedProperty($prop['LINKED_OBJECT'], $prop['LINKED_PROPERTY'], $this->name);
+        }
         SQLExec("DELETE FROM zigbeeproperties WHERE DEVICE_ID=" . $rec['ID']);
         SQLExec("DELETE FROM zigbeedevices WHERE ID='" . $rec['ID'] . "'");
     }
@@ -298,6 +360,128 @@ class zigbeedev extends module
     function edit_zigbeeproperties(&$out, $id)
     {
         require(dirname(__FILE__) . '/zigbeeproperties_edit.inc.php');
+    }
+
+    function checkDeviceType($device_id)
+    {
+        $device_rec = SQLSelectOne("SELECT * FROM zigbeedevices WHERE ID=" . (int)$device_id);
+        require DIR_MODULES . 'zigbeedev/known_devices.inc.php';
+        if (isset($models[$device_rec['MODEL']])) {
+            $found_model = $models[$device_rec['MODEL']];
+        } elseif (isset($models[$device_rec['MODEL_NAME']])) {
+            $found_model = $models[$device_rec['MODEL_NAME']];
+        }
+        if (isset($found_model) && !is_array($found_model) && isset($models[$found_model])) {
+            $found_model = $models[$found_model];
+        }
+        if (isset($found_model) && is_array($found_model)) {
+            return $found_model;
+        } else {
+            return false;
+        }
+    }
+
+    function linkDevice($device_id, $simple_device_id)
+    {
+        $types = $this->checkDeviceType($device_id);
+        $sdevice = SQLSelectOne("SELECT * FROM devices WHERE ID=" . (int)$simple_device_id);
+
+        if (!isset($sdevice['ID'])) return false;
+
+        $linked_object = $sdevice['LINKED_OBJECT'];
+
+        foreach ($types as $type) {
+            if (is_array($type['properties'])) {
+                foreach ($type['properties'] as $k => $v) {
+                    $prop = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE DEVICE_ID=" . $device_id . " AND TITLE='" . $k . "'");
+                    if (!isset($prop['ID'])) {
+                        $prop['DEVICE_ID'] = $device_id;
+                        $prop['TITLE'] = $k;
+                        $prop['UPDATED'] = date('Y-m-d H:i:s');
+                        $prop['ID'] = SQLInsert('zigbeeproperties', $prop);
+                    }
+                    $prop['LINKED_OBJECT'] = $linked_object;
+                    $prop['LINKED_PROPERTY'] = $v;
+                    SQLUpdate('zigbeeproperties', $prop);
+                    addLinkedProperty($prop['LINKED_OBJECT'], $prop['LINKED_PROPERTY'], $this->name);
+                }
+            }
+            if (is_array($type['methods'])) {
+                foreach ($type['methods'] as $k => $v) {
+                    $prop = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE DEVICE_ID=" . $device_id . " AND TITLE='" . $k . "'");
+                    if (!isset($prop['ID'])) {
+                        $prop['DEVICE_ID'] = $device_id;
+                        $prop['TITLE'] = $k;
+                        $prop['UPDATED'] = date('Y-m-d H:i:s');
+                        $prop['ID'] = SQLInsert('zigbeeproperties', $prop);
+                    }
+                    $prop['LINKED_OBJECT'] = $linked_object;
+                    $prop['LINKED_METHOD'] = $v;
+                    SQLUpdate('zigbeeproperties', $prop);
+                }
+            }
+            if (is_array($type['settings'])) {
+                foreach ($type['settings'] as $k => $v) {
+                    setGlobal($linked_object . '.' . $k, $v);
+                }
+            }
+        }
+
+    }
+
+    function createDevice($device_id)
+    {
+        require DIR_MODULES . 'devices/devices.class.php';
+        $devices_module = new devices();
+        $devices_module->setDictionary();
+
+        $types = $this->checkDeviceType($device_id);
+        foreach ($types as $type => $details) {
+            if (isset($devices_module->device_types[$type])) {
+
+                $new_title = $devices_module->device_types[$type]['TITLE'] . ' 1';
+                $new_title = preg_replace('/\(.+\)/', '', $new_title);
+                $new_title = preg_replace('/\s+/', ' ', $new_title);
+                $found_title = true;
+                while ($found_title) {
+                    $old_device = SQLSelectOne("SELECT ID FROM devices WHERE TITLE='" . DBSafe($new_title) . "'");
+                    if (!$old_device['ID']) {
+                        $found_title = false;
+                        break;
+                    } else {
+                        $found_title = true;
+                        if (preg_match('/(\d+)$/', $new_title, $m)) {
+                            $idx = (int)$m[1];
+                            $idx++;
+                            $new_title = str_replace(' ' . $m[1], ' ' . $idx, $new_title);
+                        }
+                    }
+                }
+
+                $options = array('TITLE' => $new_title);
+                if ($devices_module->addDevice($type, $options)) {
+                    $added_device = SQLSelectOne("SELECT ID FROM devices WHERE TITLE='" . DBSafe($new_title) . "'");
+                    $this->linkDevice($device_id, $added_device['ID']);
+                }
+                if (isset($details['last']) && $details['last']) break;
+            }
+        }
+    }
+
+    function canCreateDevice($device_id)
+    {
+        $device_type = $this->checkDeviceType((int)$device_id);
+        if (is_array($device_type)) {
+            $properties = SQLSelect("SELECT LINKED_OBJECT FROM zigbeeproperties WHERE DEVICE_ID='" . (int)$device_id . "'");
+            foreach ($properties as $prop) {
+                if ($prop['LINKED_OBJECT'] != '') {
+                    return false;
+                }
+            }
+            return true;
+        } else {
+            return false;
+        }
     }
 
     function setDeviceData($device_id, $property, $data)
@@ -485,7 +669,6 @@ class zigbeedev extends module
     function processListOfDevices($path, $data)
     {
         $total_devices = count($data);
-        //DebMes(json_encode($data),'zigbeedev_devices');
         for ($i = 0; $i < $total_devices; $i++) {
             $device_data = $data[$i];
             if ($device_data['friendly_name']) {
@@ -515,11 +698,15 @@ class zigbeedev extends module
             if (!$rec['ID']) {
                 $rec['UPDATED'] = date('Y-m-d H:i:s');
                 $rec['ID'] = SQLInsert('zigbeedevices', $rec);
+                $this->getConfig();
+                if ($this->config['CREATE_DEVICES_AUTOMATICALLY'] &&
+                    ($rec['MODEL'] != '' || $rec['MODEL_NAME'] != '') &&
+                    $this->canCreateDevice($rec['ID'])) {
+                    $this->createDevice($rec['ID']);
+                }
             } else {
                 SQLUpdate('zigbeedevices', $rec);
             }
-            //DebMes(json_encode($rec,JSON_PRETTY_PRINT),'zigbeedev_devices');
-            //DebMes(json_encode($device_data,JSON_PRETTY_PRINT),'zigbeedev_devices');
         }
     }
 

@@ -56,6 +56,47 @@ if ($this->tab == 'data') {
     $properties = SQLSelect("SELECT * FROM zigbeeproperties WHERE DEVICE_ID='" . $rec['ID'] . "' ORDER BY TITLE");
     $total = count($properties);
     $prop_id = gr('prop_id', 'int');
+
+    if (!$prop_id) {
+        if ($this->canCreateDevice($rec['ID'])) {
+            if ($this->mode == 'link_device') {
+                $this->linkDevice($rec['ID'], gr('device_id', 'int'));
+                $this->redirect("?id=" . $rec['ID'] . "&view_mode=" . $this->view_mode . "&tab=" . $this->tab . "&ok=1");
+            }
+            if ($this->mode == 'create_device') {
+                $this->createDevice($rec['ID']);
+                $this->redirect("?id=" . $rec['ID'] . "&view_mode=" . $this->view_mode . "&tab=" . $this->tab . "&ok=1");
+            }
+            $out['CAN_CREATE_DEVICE'] = 1;
+            $device_type = $this->checkDeviceType($rec['ID']);
+            $types = array("'impossible_device_type'");
+            foreach ($device_type as $type => $details) {
+                $types[] = "'$type'";
+            }
+            $devices = SQLSelect("SELECT ID, TITLE FROM devices WHERE TYPE IN (" . implode(',', $types) . ")");
+            if (isset($devices[0])) {
+                $out['DEVICES_TO_LINK'] = $devices;
+            }
+        } else {
+            $seen_objects = array();
+            $linked_devices = array();
+            foreach ($properties as $prop) {
+                if ($prop['LINKED_OBJECT'] != '' && !isset($seen_objects[$prop['LINKED_OBJECT']])) {
+                    $seen_objects[$prop['LINKED_OBJECT']] = 1;
+                    $sdevice = SQLSelectOne("SELECT ID, LINKED_OBJECT FROM devices WHERE LINKED_OBJECT='" . $prop['LINKED_OBJECT'] . "'");
+                    if (isset($sdevice['ID'])) {
+                        $linked_devices[]=array('ID'=>$sdevice['ID']);
+                        //$out['SIMPLE_DEVICE_ID'] = $sdevice['ID'];
+                        //$out['SIMPLE_DEVICE_LINKED_OBJECT'] = $sdevice['LINKED_OBJECT'];
+                    }
+                }
+            }
+            if (count($linked_devices)>0) {
+                $out['LINKED_DEVICES'] = $linked_devices;
+            }
+        }
+    }
+
     for ($i = 0; $i < $total; $i++) {
         if ($properties[$i]['ID'] == $new_id) continue;
         if ($properties[$i]['ID'] == $prop_id) {
