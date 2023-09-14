@@ -10,6 +10,9 @@
 //
 class zigbeedev extends module
 {
+    var $cacheDevices;
+    var $cacheProps;
+    
     /**
      * zigbeedev
      *
@@ -23,6 +26,8 @@ class zigbeedev extends module
         $this->title = "ZigbeeDev";
         $this->module_category = "<#LANG_SECTION_DEVICES#>";
         $this->checkInstalled();
+        $this->cacheDevices = [];
+        $this->cacheProps = [];
     }
 
     /**
@@ -597,11 +602,20 @@ class zigbeedev extends module
         if (preg_match('/\#$/', $path)) {
             return 0;
         }
-
-        $device = SQLSelectOne("SELECT * FROM zigbeedevices WHERE TITLE='" . DBSafe($did) . "'");
-        if (!$device['ID']) {
-            $device = SQLSelectOne("SELECT * FROM zigbeedevices WHERE IEEEADDR='" . DBSafe($did) . "'");
+        
+        if (!isset($this->cacheDevices[$did]))
+        {
+            $device = SQLSelectOne("SELECT * FROM zigbeedevices WHERE TITLE='" . DBSafe($did) . "'");
+            if (!$device['ID']) {
+                $device = SQLSelectOne("SELECT * FROM zigbeedevices WHERE IEEEADDR='" . DBSafe($did) . "'");
+            }
+            $this->cacheDevices[$device['TITLE']] = $device;
         }
+        else{
+            //echo "Get device $did from cache\n";
+            $device = $this->cacheDevices[$did];
+        }
+
         if (!$device['ID']) {
             $device = array('TITLE' => $did, 'IEEEADDR' => $did);
             $device['UPDATED'] = date('Y-m-d H:i:s');
@@ -656,14 +670,39 @@ class zigbeedev extends module
                     }
                 }
             }
+
             foreach ($ar as $k => $v) {
                 if (is_array($v)) $v = json_encode($v);
                 if ($k == 'action') {
-                    $this->processData($device, 'action:' . $v, date('Y-m-d H:i:s'));
+                    $property = $this->getProperty($device,'action:' . $v);
+                    $this->processData($device, $property, 'action:' . $v, date('Y-m-d H:i:s'));
                 }
-                $this->processData($device, $k, $v);
+                $property = $this->getProperty($device,$k);
+                $this->processData($device, $property, $k, $v);
             }
         }
+    }
+    
+    function getProperty(&$device,$title)
+    {
+        $property = array();
+        $key = $device['ID']."_".$title;
+        if (!isset($this->cacheProps[$key]))
+        {
+            $property = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE TITLE='" . DBSafe($title) . "' AND DEVICE_ID=" . $device['ID']);
+            if ($property['ID']) {
+                $this->cacheProps[$key] = $property;
+            }
+        }
+        else
+        {
+            $property = $this->cacheProps[$key];
+            //$val = $property['VALUE'];
+            //$dev = $device['TITLE'];
+            //echo "Get property $dev.$title from cache: $val\n";
+        }
+        return $property;
+        
     }
 
     function processListOfDevices($path, $data)
@@ -710,10 +749,8 @@ class zigbeedev extends module
         }
     }
 
-    function processData(&$device, $prop, $value)
+    function processData(&$device, &$property, $prop, $value)
     {
-        $property = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE TITLE='" . DBSafe($prop) . "' AND DEVICE_ID=" . $device['ID']);
-        
         if ($property['MIN_PERIOD']) {
             if (time() - strtotime($property['UPDATED']) < $property['MIN_PERIOD'])
                 return;
@@ -767,8 +804,8 @@ class zigbeedev extends module
 
                 $_z = 1.0 - $_x - $_y;
                 $Y = 1;//round($bri / 254.0,2);
-                $X = $y==0?($Y / $_y) * $_x:0;
-                $Z = $y==0?($Y / $_y) * $_z:0;
+                $X = $y!=0 ? ($Y / $_y) * $_x : 0;
+                $Z = $y!=0 ? ($Y / $_y) * $_z : 0;
                 
                 $r = ($X * 3.2406) + ($Y * -1.5372) + ($Z * -0.4986);
                 $g = ($X * -0.9689) + ($Y * 1.8758) + ($Z * 0.0415);
@@ -817,8 +854,13 @@ class zigbeedev extends module
 		
         if (!$property['ID']) {
             $property['ID'] = SQLInsert('zigbeeproperties', $property);
+            $this->cacheProps[$device['ID']."_".$property['TITLE']] = $property;
         } else {
-            SQLUpdate('zigbeeproperties', $property);
+            if ($property['VALUE'] != $old_value || $prop == 'action' || $property['PROCESS_TYPE'] == 1)
+            {
+                //echo "Update value\n";
+                SQLUpdate('zigbeeproperties', $property);
+            }
         }
 
         if ($property['LINKED_OBJECT']) {
@@ -833,26 +875,7 @@ class zigbeedev extends module
                         array('VALUE'=>$new_value,'NEW_VALUE'=>$new_value,'OLD_VALUE'=>$new_value, 'TITLE' => $prop));
                 }
                 if ($property['LINKED_PROPERTY']) {
-                    
-                    $update = true;
-                    
-                    $sqlQuery = "SELECT * FROM pvalues 
-                                WHERE PROPERTY_NAME = '" . DBSafe($property['LINKED_OBJECT'].'.'.$property['LINKED_PROPERTY']) . "'";
-                    $rec_value = SQLSelectOne($sqlQuery);
-                    if ($rec_value['ID']) {
-                        
-                        $current_value = $rec_value['VALUE'];
-                        if ($current_value==$new_value)
-                            $update = false;
-                        $timestamp1 = strtotime('-1 hour'); 
-                        $timestamp2 = strtotime($rec_value['UPDATED']); 
-                        if ($timestamp1 > $timestamp2)
-                            $update = true;
-                    }
-                    
-                    if ($update || $prop=="action") {
-                        setGlobal($property['LINKED_OBJECT'].'.'.$property['LINKED_PROPERTY'],$new_value, array($this->name => '0'));
-                    }
+                    setGlobal($property['LINKED_OBJECT'].'.'.$property['LINKED_PROPERTY'],$new_value, array($this->name => '0'),"zigbeedev");
                 }
             }
         }

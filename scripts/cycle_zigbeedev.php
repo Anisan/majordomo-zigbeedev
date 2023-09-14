@@ -73,7 +73,6 @@ foreach ($topics as $k => $v) {
     $mqtt_client->subscribe($rec, 0);
 }
 $previousMillis = 0;
-
 while ($mqtt_client->proc()) {
     $queue = checkOperationsQueue('zigbeedev_queue');
     foreach ($queue as $mqtt_data) {
@@ -110,10 +109,8 @@ while ($mqtt_client->proc()) {
 $mqtt_client->close();
 
 function procmsg($topic, $msg) {
-
     $from_hub = 0;
     $did = $topic;
-
     global $zigbeedev_module;
     if ($zigbeedev_module->config['DEBUG_MODE']) {
         DebMes("$topic :\n$msg", 'zigbeedev');
@@ -148,11 +145,11 @@ function procmsg($topic, $msg) {
     $latest_msg=$new_msg;
     if (!isset($topic) || !isset($msg)) return false;
     echo date("Y-m-d H:i:s") . " Received from {$topic} ($did, $from_hub): $msg\n";
-    if (function_exists('callAPI')) {
-        callAPI('/api/module/zigbeedev','POST',array('topic'=>$topic,'did'=>$did, 'msg'=>$msg,'hub'=>$from_hub));
-    } else {
+    //if (function_exists('callAPI')) {
+    //    callAPI('/api/module/zigbeedev','POST',array('topic'=>$topic,'did'=>$did, 'msg'=>$msg,'hub'=>$from_hub));
+    //} else {
         $zigbeedev_module->processMessage($topic, $did, $msg, $from_hub);
-    }
+    //}
 }
 
 DebMes("Unexpected close of cycle: " . basename(__FILE__));
