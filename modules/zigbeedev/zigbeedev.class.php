@@ -10,9 +10,8 @@
 //
 class zigbeedev extends module
 {
-    var $cacheDevices;
-    var $cacheProps;
     
+    var $cacheDevices;
     /**
      * zigbeedev
      *
@@ -26,8 +25,7 @@ class zigbeedev extends module
         $this->title = "ZigbeeDev";
         $this->module_category = "<#LANG_SECTION_DEVICES#>";
         $this->checkInstalled();
-        $this->cacheDevices = [];
-        $this->cacheProps = [];
+        $cacheDevices = array();
     }
 
     /**
@@ -609,29 +607,30 @@ class zigbeedev extends module
             if (!$device['ID']) {
                 $device = SQLSelectOne("SELECT * FROM zigbeedevices WHERE IEEEADDR='" . DBSafe($did) . "'");
             }
-            $this->cacheDevices[$device['TITLE']] = $device;
-        }
-        else{
-            //echo "Get device $did from cache\n";
-            $device = $this->cacheDevices[$did];
-        }
-
-        if (!$device['ID']) {
-            $device = array('TITLE' => $did, 'IEEEADDR' => $did);
-            $device['UPDATED'] = date('Y-m-d H:i:s');
-            $device['FULL_PATH'] = $path;
-            $device['FULL_PATH'] = preg_replace('/\/bridge.+/', '', $device['FULL_PATH']);
-            if ($hub) {
-                $device['IS_HUB'] = 1;
+            if (!$device['ID']) {
+                $device = array('TITLE' => $did, 'IEEEADDR' => $did);
+                $device['UPDATED'] = date('Y-m-d H:i:s');
+                $device['FULL_PATH'] = $path;
+                $device['FULL_PATH'] = preg_replace('/\/bridge.+/', '', $device['FULL_PATH']);
+                if ($hub) {
+                    $device['IS_HUB'] = 1;
+                }
+                $device['ID'] = SQLInsert('zigbeedevices', $device);
             }
-            $device['ID'] = SQLInsert('zigbeedevices', $device);
-        } else {
-            $device['UPDATED'] = date('Y-m-d H:i:s');
-            $device['FULL_PATH'] = $path;
-            $device['FULL_PATH'] = preg_replace('/\/bridge.+/', '', $device['FULL_PATH']);
-            SQLUpdate('zigbeedevices', $device);
+            $this->cacheDevices[$device["TITLE"]] = $device;
         }
-
+        $device = &$this->cacheDevices[$did];
+        $device['UPDATED'] = date('Y-m-d H:i:s');
+        $device['FULL_PATH'] = $path;
+        $device['FULL_PATH'] = preg_replace('/\/bridge.+/', '', $device['FULL_PATH']);
+        # update device
+        $rec = [
+            "ID" => $device["ID"],
+            "UPDATED" => $device["UPDATED"],
+            "FULL_PATH" => $device["FULL_PATH"],
+        ];
+        SQLUpdate('zigbeedevices', $rec);
+ 
         if (preg_match('/^{/', $value)) {
             $ar = json_decode($value, true);
             if ($hub && $ar['type'] == 'devices' && is_array($ar['message'])) {
@@ -670,39 +669,14 @@ class zigbeedev extends module
                     }
                 }
             }
-
             foreach ($ar as $k => $v) {
                 if (is_array($v)) $v = json_encode($v);
                 if ($k == 'action') {
-                    $property = $this->getProperty($device,'action:' . $v);
-                    $this->processData($device, $property, 'action:' . $v, date('Y-m-d H:i:s'));
+                    $this->processData($device, 'action:' . $v, date('Y-m-d H:i:s'));
                 }
-                $property = $this->getProperty($device,$k);
-                $this->processData($device, $property, $k, $v);
+                $this->processData($device, $k, $v);
             }
         }
-    }
-    
-    function getProperty(&$device,$title)
-    {
-        $property = array();
-        $key = $device['ID']."_".$title;
-        if (!isset($this->cacheProps[$key]))
-        {
-            $property = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE TITLE='" . DBSafe($title) . "' AND DEVICE_ID=" . $device['ID']);
-            if ($property['ID']) {
-                $this->cacheProps[$key] = $property;
-            }
-        }
-        else
-        {
-            $property = $this->cacheProps[$key];
-            //$val = $property['VALUE'];
-            //$dev = $device['TITLE'];
-            //echo "Get property $dev.$title from cache: $val\n";
-        }
-        return $property;
-        
     }
 
     function processListOfDevices($path, $data)
@@ -749,8 +723,10 @@ class zigbeedev extends module
         }
     }
 
-    function processData(&$device, &$property, $prop, $value)
+    function processData(&$device, $prop, $value)
     {
+        $property = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE TITLE='" . DBSafe($prop) . "' AND DEVICE_ID=" . $device['ID']);
+        
         if ($property['MIN_PERIOD']) {
             if (time() - strtotime($property['UPDATED']) < $property['MIN_PERIOD'])
                 return;
@@ -854,7 +830,6 @@ class zigbeedev extends module
 		
         if (!$property['ID']) {
             $property['ID'] = SQLInsert('zigbeeproperties', $property);
-            $this->cacheProps[$device['ID']."_".$property['TITLE']] = $property;
         } else {
             if ($property['VALUE'] != $old_value || $prop == 'action' || $property['PROCESS_TYPE'] == 1)
             {
@@ -882,7 +857,13 @@ class zigbeedev extends module
         if ($prop == 'battery' && $device['BATTERY_LEVEL'] != $value) {
             $device['IS_BATTERY'] = 1;
             $device['BATTERY_LEVEL'] = $value;
-            SQLUpdate('zigbeedevices', $device);
+            #update in DB
+            $rec = [
+                "ID" => $device["ID"],
+                "IS_BATTERY" => $device["IS_BATTERY"],
+                "BATTERY_LEVEL" => $device["BATTERY_LEVEL"],
+            ];
+            SQLUpdate('zigbeedevices', $rec);
         }
     }
 

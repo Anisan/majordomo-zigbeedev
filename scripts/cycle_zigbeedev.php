@@ -120,7 +120,7 @@ function procmsg($topic, $msg) {
 
     if (!preg_match('/bridge\//',$topic)) {
         global $topics;
-        $did = strtolower($did);
+        //$did = strtolower($did);
         foreach($topics as $t=>$v) {
             $t = strtolower($t);
             $t = preg_replace('/#$/','',$t);
