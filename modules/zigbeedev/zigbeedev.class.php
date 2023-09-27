@@ -611,7 +611,7 @@ class zigbeedev extends module
                 $device = array('TITLE' => $did, 'IEEEADDR' => $did);
                 $device['UPDATED'] = date('Y-m-d H:i:s');
                 $device['FULL_PATH'] = $path;
-                $device['FULL_PATH'] = preg_replace('/\/bridge.+/', '', $device['FULL_PATH']);
+                $device['FULL_PATH'] = preg_replace('/\/bridge.+|\/availability$/', '', $device['FULL_PATH']);
                 if ($hub) {
                     $device['IS_HUB'] = 1;
                 }
