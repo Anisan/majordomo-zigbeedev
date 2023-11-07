@@ -669,12 +669,16 @@ class zigbeedev extends module
                     }
                 }
             }
+            $prop = SQLSelect("SELECT * FROM zigbeeproperties WHERE DEVICE_ID=" . $device['ID']);
+            foreach($prop as $property){
+                $properties[$property['TITLE']] = $property;
+            }
             foreach ($ar as $k => $v) {
                 if (is_array($v)) $v = json_encode($v);
                 if ($k == 'action') {
-                    $this->processData($device, 'action:' . $v, date('Y-m-d H:i:s'));
+                    $this->processData($device, 'action:' . $v, date('Y-m-d H:i:s'), $properties);
                 }
-                $this->processData($device, $k, $v);
+                $this->processData($device, $k, $v, $properties);
             }
         }
     }
@@ -723,16 +727,14 @@ class zigbeedev extends module
         }
     }
 
-    function processData(&$device, $prop, $value)
+    function processData(&$device, $prop, $value, $properties='')
     {
-        $property = SQLSelectOne("SELECT * FROM zigbeeproperties WHERE TITLE='" . DBSafe($prop) . "' AND DEVICE_ID=" . $device['ID']);
-        
+        $property = $properties[$prop];
         if ($property['MIN_PERIOD']) {
             if (time() - strtotime($property['UPDATED']) < $property['MIN_PERIOD'])
                 return;
         }
-        
-        if (!$property['ID']) {
+        if (!isset($property['ID'])) {
             $property = array('TITLE' => $prop, 'DEVICE_ID' => $device['ID']);
         }
         if (is_bool($value)) {
